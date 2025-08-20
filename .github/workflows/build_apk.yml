@@ -11,22 +11,39 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container: ghcr.io/cirruslabs/flutter:stable   # ✅ Prebuilt Flutter + Android SDK
+
+    if: "!startsWith(github.ref, 'refs/tags/')"   # ✅ Skip build on tag push
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      # ✅ Cache Flutter pub dependencies
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
         with:
-          channel: 'stable'
+          path: |
+            ~/.pub-cache
+            build/
+          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.lock') }}
+          restore-keys: ${{ runner.os }}-pub-
+
+      # ✅ Cache Gradle dependencies
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
 
       - name: Get Flutter dependencies
         run: flutter pub get
 
       - name: Build Android Release APK
         run: flutter build apk --release
-        # Note: For production, configure signing in gradle and store credentials securely.
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -35,10 +52,8 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
 
   release:
-    needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-
     steps:
       - name: Download APK artifact
         uses: actions/download-artifact@v4
